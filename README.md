@@ -2,6 +2,15 @@
 
 A Flutter mobile app for sending cold emails with a selected resume attachment, backed by Supabase Storage, Postgres, and a Gmail-powered Supabase Edge Function.
 
+
+## Screenshots
+
+<p align="center">
+  <img src="screenshots/cold-mailer-photo-3.jpeg" width="250" />
+  <img src="screenshots/cold-mailer-photo-2.jpeg" width="250" />
+  <img src="screenshots/cold-mailer-photo-1.jpeg" width="250" />
+</p>
+
 ## Features
 
 - Upload PDF, DOC, or DOCX resumes to Supabase Storage.
