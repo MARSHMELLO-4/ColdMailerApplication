@@ -17,15 +17,50 @@ class SupabaseRepository {
   final SupabaseClient _client;
   final AppConfig _config;
 
-  Future<List<Contact>> fetchContacts() async {
-    final response = await _client
-        .from('contacts')
-        .select()
-        .order('last_attempted_at', ascending: false)
-        .limit(100);
+  Future<int> fetchContactCount({String? searchQuery}) async {
+    try {
+      var query = _client.from('contacts').count(CountOption.exact);
 
-    return response
-        .map<Contact>((row) => Contact.fromJson(Map<String, dynamic>.from(row)))
+      if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+        final sanitized = searchQuery.trim();
+        query = query.ilike('email', '%$sanitized%');
+      }
+
+      return await query;
+    } catch (_) {
+      final response = await _client.from('contacts').select('id');
+      return (response as List).length;
+    }
+  }
+
+  Future<List<Contact>> fetchContacts({
+    int? limit,
+    int? offset,
+    String? searchQuery,
+  }) async {
+    var query = _client.from('contacts').select();
+
+    if (searchQuery != null && searchQuery.trim().isNotEmpty) {
+      final sanitized = searchQuery.trim();
+      query = query.ilike('email', '%$sanitized%');
+    }
+
+    final orderedQuery = query.order('last_attempted_at', ascending: false);
+
+    dynamic response;
+    if (offset != null && limit != null) {
+      response = await orderedQuery.range(offset, offset + limit - 1);
+    } else if (limit != null) {
+      response = await orderedQuery.limit(limit);
+    } else {
+      response = await orderedQuery;
+    }
+
+    final list = response as List;
+    return list
+        .map<Contact>(
+          (row) => Contact.fromJson(Map<String, dynamic>.from(row as Map)),
+        )
         .toList();
   }
 

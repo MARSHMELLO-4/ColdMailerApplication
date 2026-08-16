@@ -25,8 +25,10 @@ class _HomeScreenState extends State<HomeScreen> {
   late final TextEditingController _recipientsController;
   late final TextEditingController _subjectController;
   late final TextEditingController _bodyController;
+  late final TextEditingController _contactSearchController;
 
   List<Contact> _contacts = [];
+  int _contactsCount = 0;
   List<ResumeRecord> _resumes = [];
   ResumeRecord? _selectedResume;
   bool _loading = true;
@@ -59,6 +61,7 @@ class _HomeScreenState extends State<HomeScreen> {
     )..addListener(_refresh);
     _bodyController = TextEditingController(text: widget.config.defaultBody)
       ..addListener(_refresh);
+    _contactSearchController = TextEditingController()..addListener(_refresh);
     _loadData();
   }
 
@@ -71,6 +74,9 @@ class _HomeScreenState extends State<HomeScreen> {
       ..removeListener(_refresh)
       ..dispose();
     _bodyController
+      ..removeListener(_refresh)
+      ..dispose();
+    _contactSearchController
       ..removeListener(_refresh)
       ..dispose();
     super.dispose();
@@ -90,6 +96,7 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       final contacts = await _repository.fetchContacts();
       final resumes = await _repository.fetchResumes();
+      final count = await _repository.fetchContactCount();
 
       if (!mounted) {
         return;
@@ -97,6 +104,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         _contacts = contacts;
+        _contactsCount = count >= contacts.length ? count : contacts.length;
         _resumes = resumes;
         _selectedResume = _resolveSelectedResume(resumes);
       });
@@ -247,8 +255,8 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() => _selectedIndex = index),
         destinations: const [
           NavigationDestination(
-            icon: const Icon(Icons.mail_outline),
-            selectedIcon: const Icon(Icons.mail),
+            icon: Icon(Icons.mail_outline),
+            selectedIcon: Icon(Icons.mail),
             label: 'Compose',
           ),
           NavigationDestination(
@@ -278,7 +286,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _MetricStrip(
             metrics: [
               _Metric('Recipients', parsed.valid.length.toString()),
-              _Metric('Contacts', _contacts.length.toString()),
+              _Metric('Contacts', _contactsCount.toString()),
               _Metric('Resumes', _resumes.length.toString()),
             ],
           ),
@@ -454,20 +462,93 @@ class _HomeScreenState extends State<HomeScreen> {
       return const Center(child: CircularProgressIndicator());
     }
 
+    final query = _contactSearchController.text.trim().toLowerCase();
+    final filteredContacts = query.isEmpty
+        ? _contacts
+        : _contacts.where((contact) {
+            final emailMatch = contact.email.toLowerCase().contains(query);
+            final subjectMatch =
+                contact.lastSubject?.toLowerCase().contains(query) ?? false;
+            return emailMatch || subjectMatch;
+          }).toList();
+
     return RefreshIndicator(
       onRefresh: _loadData,
       child: ListView(
         padding: const EdgeInsets.all(16),
         physics: const AlwaysScrollableScrollPhysics(),
         children: [
+          if (_contacts.isNotEmpty) ...[
+            TextField(
+              controller: _contactSearchController,
+              decoration: InputDecoration(
+                hintText: 'Search contacts by email or subject...',
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: query.isNotEmpty
+                    ? IconButton(
+                        icon: const Icon(Icons.clear),
+                        onPressed: () {
+                          _contactSearchController.clear();
+                        },
+                      )
+                    : null,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    query.isEmpty
+                        ? 'Total Contacts: $_contactsCount'
+                        : 'Showing ${filteredContacts.length} of $_contactsCount contacts',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                  ),
+                  if (_loading)
+                    const SizedBox.square(
+                      dimension: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           if (_contacts.isEmpty)
             const _EmptyState(
               icon: Icons.people_outline,
               title: 'No contacts yet',
               message: 'Sent emails will appear here.',
             )
+          else if (filteredContacts.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 48),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(
+                      Icons.search_off,
+                      size: 40,
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'No contacts matching "$query"',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            color:
+                                Theme.of(context).colorScheme.onSurfaceVariant,
+                          ),
+                    ),
+                  ],
+                ),
+              ),
+            )
           else
-            ..._contacts.map(
+            ...filteredContacts.map(
               (contact) => Card(
                 child: ListTile(
                   leading: CircleAvatar(
